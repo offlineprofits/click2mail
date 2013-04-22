@@ -1,0 +1,173 @@
+<?php
+
+include_once 'Api/Click2mail_Mailingonline_Api.php';
+$url = "https://mailingonline.click2mail.com";
+$username = "username";
+$password = "password";
+$path_to_pdf = "fixtures/pdf/sample_pdf.pdf";
+$path_to_csv = "fixtures/csv/sample_list.csv";
+$new_document_name = "upload_doc_" . time();
+$image_file_type = array('PDF' => 2);
+
+$api = new Click2mail_Mailingonline_Api($url, $username, $password);
+
+//Define document template id
+$document_template_id = 0; // Document id from the proof page
+$data_template = 0; // Data template id from the proof page.
+
+//Upload PDF file using HTTP method
+$uploaded_file_id = $api->UploadDocument($path_to_pdf);
+
+//Create Document From Template
+
+try{
+	$response = $api->CreateDocumentFromTemplate($new_document_name, $document_template_id, $image_file_type['PDF'], $uploaded_file_id);
+}catch(Exception $e){
+	echo $e->getMessage();
+
+}
+
+try{
+	$document_creation_token = $response->document_creation_token;
+}catch(Exception $e){
+	echo $e->getMessage();
+
+}
+
+$status_id = 0;
+
+try{
+	while($status_id != 2){
+
+		$response = $api->CheckDocumentCreateStatus($document_creation_token);
+		$status_id = $response->document_creation_status->status_id;
+
+		if($status_id == 3){
+			throw new Exception("status_id is 3 - there is an error");
+		}
+		sleep(30);
+	}
+}catch(Exception $e){
+	echo $e->getMessage();
+}
+
+try{
+	$response = $api->CompleteDocumentCreation($document_creation_token);
+}catch(Exception $e){
+	echo $e->getMessage();
+
+}
+
+$document_id = $response->document_id;
+
+
+$data = array(0 => array(
+						array('name' => 'FIRST_NAME', 'value' => 'First'),
+						array('name' => 'LAST_NAME', 'value' => 'Last'),
+						array('name' => 'ADDRESS', 'value' => 'Address'),
+						array('name' => 'CITY', 'value' => 'City'),
+						array('name' => 'STATE', 'value' => 'State'),
+						array('name' => 'ZIP', 'value' => '55555')
+						),						
+			 2 => array(
+						array('name' => 'FIRST_NAME', 'value' => 'First'),
+						array('name' => 'LAST_NAME', 'value' => 'Last'),
+						array('name' => 'ADDRESS', 'value' => 'Address'),
+						array('name' => 'CITY', 'value' => 'City'),
+						array('name' => 'STATE', 'value' => 'State'),
+						array('name' => 'ZIP', 'value' => '55555')
+						));
+
+try{
+	$response = $api->CreateDataList($data_template, $data);
+
+}catch(Exception $e){
+	echo $e->getMessage();
+}
+
+$list_id = $response->list_id;
+
+$list_status = 0;
+try{
+	while($list_status != 5){
+
+		$response = $api->CheckListStatus($list_id);
+		$list_status = $response->list_status->status_id;
+
+		if($list_status == 9){
+			throw new Exception('There is an error with processing your list.');
+		}
+		sleep(15);
+	}
+}catch(Exception $e){
+	echo $e->getMessage();
+}
+
+try{
+	$response = $api->SubmitPreview($document_id, $list_id);
+}catch(Excpetion $e){
+	echo $e->getMessage();
+}
+
+$preview_id = $response->preview_id;
+
+$preview_status = 0;
+
+try{
+	while($preview_status != 2){
+		$response = $api->CheckPreviewStatus($preview_id);
+		$preview_status = $response->preview_status->status_id;
+
+		if($preview_status == 3){
+			throw new Exception("preview_status is 4 - there was an error");
+		}
+		sleep(15);
+	}
+
+}catch(Exception $e){
+	echo $e->getMessage();
+}
+
+try{
+	$response = $api->GetPreviewPDFURL($preview_id);
+}catch(Exception $e){
+	echo $e->getMessage();
+}
+
+echo $response->pdf_url;
+echo " ";
+
+$mail_type_code = 'Certified Mail with electronic return receipt';
+
+$preferred_schedule_date = date('m/d/Y', strtotime('today') + 60 * 60 * 24);
+$billing_details = array('bill_name' => 'Billing Name', //Required
+						 'bill_address1' => 'Address1', //Required
+						 'bill_city' => 'City', //Required
+						 'bill_state' => 'State', //Required
+                         'bill_zip' => '55555', //Required
+						 'bill_type' => 'Credit Card', //Required
+					     'bill_number' => '4111111111111111', //Pass empty string if no value is required
+                         'bill_exp_month' => '10', //Pass empty string if no value is required
+						 'bill_exp_year' => '2020');  //Pass empty string if no value is required
+
+
+
+$return_address = array('name' => 'Name',
+						'business' => '',
+						'address' => 'Address',
+						'city' => 'City',
+						'state' => 'State',
+						'zip' => '55555',
+						'ancillary_endorsement' => ' ');		
+$testing = true;
+
+try{
+	$reponse = $api->SubmitJob3($document_id, $list_id, $mail_type_code, $preferred_schedule_date, $billing_details, $return_address, $testing);
+}catch(Exception $e){
+	echo $e->getMessage();
+}
+$job_id = $reponse->job_id;
+
+echo $job_id;
+
+
